@@ -73,23 +73,66 @@ input::placeholder,
     background-color: rgb(36, 39, 41);
 }
 
-.emoji-mart-dark .emoji-mart-category-label span {
-    background-color: rgb(41, 44, 46);
-}
-.emoji-mart-dark {
-    background-color: rgb(41, 44, 46);
-}
-
-.emoji-mart-dark .emoji-mart-search input {
-    background-color: rgb(46, 49, 51);
-}
-
-#emoji-trigger {
-    fill: #969696!important;
-    stroke: #969696!important;
+/* Voice message controls: the site draws these circular controls with CSS
+   custom properties (--voice-button-bg / --voice-button-fg). DarkReader
+   leaves them un-inverted, so on a light theme they can stay glaring white
+   and the play triangle (border-left: var(--voice-button-fg)) can be lost.
+   Override the custom properties AND add explicit !important rules so the
+   buttons are a dim dark grey with a clearly visible light icon. */
+.MessageBubble {
+    --voice-button-bg: #3c4147 !important;
+    --voice-button-fg: #ffffff !important;
+    --voice-button-hover-bg: #4a5057 !important;
 }
 
-#emoji-trigger.hovered {
-    fill: #7bb5f9;
-    stroke: #7bb5f9;
+.MessageBubble .VoiceView .voicePlayButton,
+.MessageBubble .VoiceView .voiceSpeedButton,
+.MessageBubble .AudioPlaybackControl.compact .playbackButton,
+.MessageBubble .AudioPlaybackControl.compact .speedButton {
+    background-color: #3c4147 !important;
+    color: #ffffff !important;
 }
+
+.MessageBubble .VoiceView .voicePlayButton .playIcon,
+.MessageBubble .AudioPlaybackControl.compact .playbackButton .playIcon {
+    width: 0 !important;
+    height: 0 !important;
+    margin-left: 3px !important;
+    border-top: 7px solid transparent !important;
+    border-bottom: 7px solid transparent !important;
+    border-left: 11px solid #ffffff !important;
+}
+
+.MessageBubble .AudioPlaybackControl.compact .playbackButton .pauseIcon {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px !important;
+}
+
+.MessageBubble .AudioPlaybackControl.compact .playbackButton .pauseIcon i {
+    display: block !important;
+    width: 3px !important;
+    height: 13px !important;
+    border-radius: 1px !important;
+    background-color: #ffffff !important;
+}
+
+.MessageBubble .VoiceView .voiceSpeedButton span,
+.MessageBubble .AudioPlaybackControl.compact .speedButton span {
+    color: #ffffff !important;
+}
+
+/* Loading spinner (SpinIcon) is border-based and circular, DarkReader will not
+   invert it either, so pin light borders to keep it visible in dark mode. */
+.MessageBubble .AudioPlaybackControl.compact .loading .SpinIcon {
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    border-top-color: #d8d8d8 !important;
+}
+
+/* Keep the voice meta / time labels readable in dark mode. */
+.MessageBubble .VoiceView .voiceMeta,
+.MessageBubble .AudioPlaybackControl.compact .audioMeta {
+    color: #969696 !important;
+}
+

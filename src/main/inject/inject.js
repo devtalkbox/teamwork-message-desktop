@@ -18,7 +18,6 @@ const urls = {
  * isNotoSans: string,
  * isPingFang: string,
  * isSubpixel: string,
- * emojiPicker: string,
  * darkModeFixes: string,
  * }} */
 const injectedCss = injectedCode['CSS']
@@ -30,8 +29,7 @@ const injectedCss = injectedCode['CSS']
  * sunny: string,
  * moon: string,
  * roomBooking: string,
- * supportTicket: string,
- * emojiTrigger: string
+ * supportTicket: string
  * }} */
 const injectedSvg = injectedCode['SVG']
 
@@ -263,39 +261,6 @@ function registerFontHandling() {
   })
 }
 
-// brain-less copy from https://jsfiddle.net/Xeoncross/4tUDk/
-const pasteHtmlAtCaret = html => {
-  let sel, range
-  if (window.getSelection) {
-    sel = window.getSelection()
-    if (sel.getRangeAt && sel.rangeCount) {
-      range = sel.getRangeAt(0)
-      range.deleteContents()
-
-      // Range.createContextualFragment() would be useful here but is
-      // non-standard and not supported in all browsers (IE9, for one)
-      const el = document.createElement('div')
-      el.innerHTML = html
-      let frag = document.createDocumentFragment(),
-        node,
-        lastNode
-      while ((node = el.firstChild)) {
-        lastNode = frag.appendChild(node)
-      }
-      range.insertNode(frag)
-
-      // Preserve the selection
-      if (lastNode) {
-        range = range.cloneRange()
-        range.setStartAfter(lastNode)
-        range.collapse(true)
-        sel.removeAllRanges()
-        sel.addRange(range)
-      }
-    }
-  }
-}
-
 /**
  * Emit CustomEvent('onRootMutate', { detail: MutationRecord[] }) when there is a change in root element
  */
@@ -395,81 +360,6 @@ function registerFunctionalButtons() {
             },
             icon: injectedSvg.gt,
           })
-        }
-      }
-    },
-    { passive: true },
-  )
-}
-
-function registerEmojiHandling() {
-  const emojiPickerStyleEl = document.createElement('style')
-  emojiPickerStyleEl.innerText = injectedCss.emojiPicker
-
-  // add style to DOM
-  document.head.appendChild(emojiPickerStyleEl)
-
-  // create emoji picker
-  const picker = new window.Picker({
-    onEmojiSelect: emoji => {
-      const el = document.getElementsByClassName('Editable')[0]
-      el?.focus()
-
-      requestAnimationFrame(() => {
-        pasteHtmlAtCaret(emoji.native)
-        el?.dispatchEvent(new Event('input'))
-      })
-    },
-  })
-
-  document.body.prepend(picker)
-
-  let dismissEmojiPicker = null
-  const showEmojiPicker = () => {
-    document.getElementById('emoji-trigger')?.classList.add('hovered')
-    if (!picker?.classList.contains('visible')) {
-      picker?.classList.add('visible')
-    }
-  }
-  const cancelDismissEmojiPicker = () => {
-    if (dismissEmojiPicker != null) {
-      clearTimeout(dismissEmojiPicker)
-    }
-  }
-  const scheduleDismissEmojiPicker = () => {
-    cancelDismissEmojiPicker()
-    dismissEmojiPicker = setTimeout(() => {
-      requestAnimationFrame(() => {
-        picker?.classList.remove('visible')
-        document.getElementById('emoji-trigger')?.classList.remove('hovered')
-      })
-    }, 300)
-  }
-
-  picker.addEventListener('mouseenter', cancelDismissEmojiPicker)
-  picker.addEventListener('mouseleave', scheduleDismissEmojiPicker)
-
-  window.addEventListener(
-    'onRootMutate',
-    ({ detail: mutationsList }) => {
-      for (let mutation of mutationsList) {
-        if (
-          mutation.type === 'childList' &&
-          mutation.addedNodes.length === 0 &&
-          mutation.target?.className === 'ChatView' &&
-          mutation.nextSibling?.className === 'InputBox'
-        ) {
-          const adjacentElement = document.getElementsByClassName('file')[0]
-          const hasEmojiTrigger = !!document.getElementById('emoji-trigger')
-
-          if (adjacentElement && !hasEmojiTrigger) {
-            adjacentElement.insertAdjacentHTML('beforebegin', injectedSvg.emojiTrigger)
-            // require to get it in runtime when the dom tree has changed
-            const emojiTrigger = document.getElementById('emoji-trigger')
-            emojiTrigger.addEventListener('mouseenter', showEmojiPicker)
-            emojiTrigger.addEventListener('mousemove', showEmojiPicker)
-            emojiTrigger.addEventListener('mouseleave', scheduleDismissEmojiPicker)
-          }
         }
       }
     },
@@ -861,8 +751,5 @@ registerResetRecommendedSettings()
 
 // handle download latest version
 registerDownloadLatestVersion()
-
-// handle emoji features
-registerEmojiHandling()
 
 registerAutoScroll()

@@ -8,6 +8,11 @@ import { config } from './config'
 
 const isDevelopment = process.env.NODE_ENV !== 'production'
 
+// When config.development is `true`, load the local dev server instead of
+// the production site (useful for local development / debugging).
+const isDevConfig = config.development === true
+const loadUrl = isDevConfig ? config.developmentUrl : config.teamworkUrl
+
 // brain-less copy https://stackoverflow.com/a/16684530/6763724
 const getDirFilesRecursively = function(dir) {
   let results = []
@@ -48,7 +53,7 @@ export async function createMainWindow() {
 
   const isMac = process.platform === 'darwin'
 
-  if (isDevelopment) {
+  if (isDevelopment || isDevConfig) {
     window.webContents.openDevTools()
   }
 
@@ -143,7 +148,7 @@ export async function createMainWindow() {
     }, 30)
   })
 
-  await window.loadURL(config.teamworkUrl)
+  await window.loadURL(loadUrl)
 
   return window
 }

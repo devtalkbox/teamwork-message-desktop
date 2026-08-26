@@ -1,4 +1,11 @@
 const config = {
+  // Development mode flag.
+  // When set to `true`, the app loads the local development server
+  // (developmentUrl) instead of the production site, and opens the
+  // DevTools — useful for local development & debugging even in a
+  // packaged build. Set to `false` for production builds.
+  development: false,
+  developmentUrl: 'http://localhost:8080/#',
   teamworkUrl: 'https://teamwork.gtomato.com/',
   dashboardUrl: 'https://web.dashboard.gtomato.com/',
   supportTicketUrl: 'https://osticket.gtomato.com/',

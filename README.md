@@ -8,7 +8,7 @@ Also bring in some interesting UI enhancements.
 
 - [x] Dark Mode
 - [x] Native Badges
-- [x] Emoji Keyboard
+- [x] ~~Emoji Keyboard~~ (removed — the web version ships its own emoji picker)
 - [x] Border-less Setting
 - [x] Bold Username Setting
 - [x] Bubble Display Date Setting
@@ -53,20 +53,65 @@ new BrowserWindow({
 })
 ```
 
+### Development Mode
+
+The app normally loads the production site `https://teamwork.gtomato.com/`.
+
+For local development, flip the `development` flag in `src/main/config.js`
+to `true`. The window will then load `http://localhost:8080/#` (your local
+front-end dev server) and auto-open DevTools — this also works in a packaged
+build, which is handy for debugging against a local server:
+
+```js
+const config = {
+  development: true, // set to false for production builds
+  developmentUrl: 'http://localhost:8080/#',
+  teamworkUrl: 'https://teamwork.gtomato.com/',
+}
+```
+
+> Remember to set `development` back to `false` before distributing.
+
 # Getting Started
 
 > A bare minimum project structure to get started developing with [`electron-webpack`](https://github.com/electron-userland/electron-webpack).
 
 ```bash
-# Install
+# Install dependencies (Node 16/18/20+)
 yarn install
 
 # run application in development mode
 yarn dev
 
-# create production build.
-# You need a developer certificate and apple id account(check sample.env)
-yarn dist:dir
+# build an unsigned .app (no developer certificate needed)
+yarn dist:dir-nosign
+```
+
+### Node.js & network notes
+
+- The build toolchain uses webpack 4. Under Node 17+ (OpenSSL 3) it requires
+  `NODE_OPTIONS=--openssl-legacy-provider`, which is already baked into the
+  `dev` / `compile` scripts — no manual export needed.
+- If GitHub is unreachable (e.g. in China), export these mirrors before
+  installing or running anything that downloads Electron binaries:
+
+```bash
+export ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+export ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/"
+yarn install
+```
+
+### Cross-architecture development (Apple Silicon ⇄ Intel)
+
+`yarn dev` launches the Electron binary inside `node_modules`, which must
+match your CPU architecture. If you copy the project (including
+`node_modules`) from an Apple Silicon Mac to an Intel Mac, `yarn dev` would
+otherwise fail. The `predev` hook (`scripts/check-electron-arch.js`) detects
+the mismatch and automatically re-downloads the correct binary:
+
+```bash
+export ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+yarn dev
 ```
 
 # Code Signing
@@ -79,10 +124,35 @@ in order to pass through the Mac GateKeeper.
 
 This project use `electron-notarize`. Details tutorial: https://kilianvalkhof.com/2019/electron/notarizing-your-electron-application/
 
-# Without notarize
+`scripts/notarize.js` automatically **skips** notarization when
+`APPLEID` / `APPLEIDPASS` are not set, so unsigned local builds succeed
+without touching the `afterSign` hook. Set the credentials (see
+`sample.env`) when you actually want to notarize.
 
-Remove `"afterSign": "scripts/notarize.js"` in `package.json` then run
+# Packaging & Distribution
 
-```console
-yarn dist:mac
+### DMG vs PKG
+
+- **DMG** is a drag-to-`/Applications` disk image — it does **not**
+  auto-install. Users must drag `Teamwork Wrap+.app` onto the `Applications`
+  shortcut inside the DMG, otherwise the app won't show up in Launchpad /
+  Applications and they will keep launching it from the mounted image.
+- **PKG** installs the app into `/Applications` automatically, so it appears
+  in Launchpad / Applications right after installation.
+
+Build unsigned packages (no developer certificate needed):
+
+```bash
+# Intel
+npx electron-builder build --mac dmg  --x64   -c.mac.identity=null
+npx electron-builder build --mac pkg  --x64   -c.mac.identity=null
+
+# Apple Silicon
+npx electron-builder build --mac dmg  --arm64 -c.mac.identity=null
+npx electron-builder build --mac pkg  --arm64 -c.mac.identity=null
 ```
+
+> Unsigned packages are blocked by Gatekeeper on other machines: right-click →
+> Open the first time (or allow them under System Settings → Privacy &
+> Security). For public distribution you still need a developer certificate
+> and notarization.

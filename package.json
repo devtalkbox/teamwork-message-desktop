@@ -4,8 +4,9 @@
   "version": "5.1.1",
   "license": "MIT",
   "scripts": {
-    "dev": "electron-webpack dev",
-    "compile": "electron-webpack",
+    "predev": "node scripts/check-electron-arch.js",
+    "dev": "NODE_OPTIONS=--openssl-legacy-provider electron-webpack dev",
+    "compile": "NODE_OPTIONS=--openssl-legacy-provider electron-webpack",
     "dist": "yarn compile && electron-builder",
     "dist:windows": "yarn compile && electron-builder build --win",
     "dist:mac": "yarn compile && electron-builder build --mac -c.compression=store -c.mac.identity=null",
