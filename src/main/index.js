@@ -2,6 +2,11 @@ import { app, ipcMain, Menu } from 'electron'
 import electronDl from 'electron-dl'
 import { createApplicationMenu } from './create-application-menu'
 import { createMainWindow } from './create-main-window'
+import { config } from './config'
+
+if (config.disableHardwareAcceleration) {
+  app.disableHardwareAcceleration()
+}
 
 // https://github.com/sindresorhus/electron-dl
 electronDl({
@@ -10,10 +15,11 @@ electronDl({
 
 // global reference to mainWindow (necessary to prevent window from being garbage collected)
 let mainWindow
+const chunkRecoveryAttempted = new WeakSet()
 
 // close all window before user trigger quit
 app.on('before-quit', () => {
-  if (mainWindow) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.removeAllListeners('close')
     mainWindow.close()
   }
@@ -21,15 +27,11 @@ app.on('before-quit', () => {
 
 // quit application when all windows are closed
 app.on('window-all-closed', () => {
-  // on macOS it is common for applications to stay open until the user explicitly quits
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  app.quit()
 })
 
 app.on('activate', async () => {
-  // on macOS it is common to re-create a window even after all windows have been closed
-  if (mainWindow === null) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
     mainWindow = await createMainWindow()
   } else {
     mainWindow.show()
@@ -38,7 +40,19 @@ app.on('activate', async () => {
 
 // create main BrowserWindow when electron is ready
 app.on('ready', async () => {
-  mainWindow = await createMainWindow()
+  try {
+    mainWindow = await createMainWindow()
+    mainWindow.on('closed', () => {
+      mainWindow = null
+    })
+  } catch (error) {
+    console.error('[startup] Failed to create the main window', error)
+    app.quit()
+  }
+})
+
+app.on('child-process-gone', (event, details) => {
+  console.error('[child-process-gone]', details.type, details.reason, details.exitCode)
 })
 
 // listen badge update from renderer
@@ -95,4 +109,25 @@ ipcMain.on('application-settings', (event, data) => {
   })
 
   Menu.setApplicationMenu(menu)
+})
+
+ipcMain.on('chunk-load-error', async event => {
+  const webContents = event.sender
+  if (webContents.isDestroyed() || chunkRecoveryAttempted.has(webContents)) return
+
+  chunkRecoveryAttempted.add(webContents)
+  console.warn('[chunk-recovery] Clearing stale web caches and reloading once')
+
+  try {
+    await webContents.session.clearCache()
+    await webContents.session.clearStorageData({
+      storages: ['serviceworkers', 'cachestorage'],
+    })
+
+    if (!webContents.isDestroyed()) {
+      webContents.reloadIgnoringCache()
+    }
+  } catch (error) {
+    console.error('[chunk-recovery] Failed to clear stale web caches', error)
+  }
 })

@@ -3,6 +3,9 @@
   "productName": "Teamwork Wrap+",
   "version": "5.1.1",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "predev": "node scripts/check-electron-arch.js",
     "dev": "NODE_OPTIONS=--openssl-legacy-provider electron-webpack dev",
@@ -70,7 +73,7 @@
   "devDependencies": {
     "copy-webpack-plugin": "^6.0.1",
     "dotenv": "^8.2.0",
-    "electron": "^28.1.3",
+    "electron": "^44.0.0",
     "electron-builder": "^24.9.1",
     "electron-notarize": "^0.3.0",
     "electron-webpack": "^2.8.2",

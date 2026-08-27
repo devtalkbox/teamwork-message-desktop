@@ -115,6 +115,11 @@ function registerDarkModeHandling() {
   console.debug('registerDarkModeHandling')
 
   const updateUI = isDark => {
+    document.documentElement.classList.toggle('dark', isDark)
+    if (document.body) {
+      document.body.classList.toggle('dark', isDark)
+    }
+
     if (isDark) {
       // noinspection JSUnresolvedVariable
       DarkReader.enable(
@@ -529,7 +534,17 @@ function registerDraftHandling() {
     'onXHRResponse',
     ({ detail: { method, url, responseText, data } }) => {
       if (!responseText) return
-      const responseJson = JSON.parse(responseText)
+      const isDraftEndpoint =
+        url.endsWith('api/group') || url.endsWith('api/user') || url.endsWith('api/message/sendMsg')
+      if (!isDraftEndpoint) return
+
+      let responseJson
+      try {
+        responseJson = JSON.parse(responseText)
+      } catch (error) {
+        console.warn('Unable to parse Teamwork API response', url, error)
+        return
+      }
 
       if (url.endsWith('api/group')) {
         if (responseJson?.data && Array.isArray(responseJson.data)) {
@@ -564,10 +579,6 @@ function registerXHRInterceptor() {
   XMLHttpRequest.prototype.open = function (method, url) {
     this._method = method
     this._url = url
-    if (!this._hooked) {
-      this._hooked = true
-      setupHook(this)
-    }
     rawOpen.apply(this, arguments)
   }
   XMLHttpRequest.prototype.send = function (data) {
@@ -577,38 +588,27 @@ function registerXHRInterceptor() {
         detail: { data, url: this.url },
       }),
     )
+
+    this.addEventListener(
+      'loadend',
+      () => {
+        if (this.responseType !== '' && this.responseType !== 'text') return
+
+        window.dispatchEvent(
+          new CustomEvent('onXHRResponse', {
+            detail: {
+              url: this._url,
+              method: this._method,
+              data: this._data,
+              responseText: this.responseText,
+            },
+          }),
+        )
+      },
+      { once: true },
+    )
+
     rawSend.apply(this, arguments)
-  }
-
-  function setupHook(xhr) {
-    function getter() {
-      delete xhr.responseText
-      const ret = xhr.responseText
-      setup()
-
-      window.dispatchEvent(
-        new CustomEvent('onXHRResponse', {
-          detail: {
-            url: this._url,
-            method: this._method,
-            data: this._data,
-            responseText: ret,
-          },
-        }),
-      )
-      return ret
-    }
-
-    function setter(str) {}
-
-    function setup() {
-      Object.defineProperty(xhr, 'responseText', {
-        get: getter,
-        set: setter,
-        configurable: true,
-      })
-    }
-    setup()
   }
 }
 

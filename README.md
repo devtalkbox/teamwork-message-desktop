@@ -77,7 +77,7 @@ const config = {
 > A bare minimum project structure to get started developing with [`electron-webpack`](https://github.com/electron-userland/electron-webpack).
 
 ```bash
-# Install dependencies (Node 16/18/20+)
+# Install dependencies (Node 22.12+)
 yarn install
 
 # run application in development mode
@@ -89,6 +89,7 @@ yarn dist:dir-nosign
 
 ### Node.js & network notes
 
+- Electron 44 requires Node.js 22.12 or newer when installing dependencies.
 - The build toolchain uses webpack 4. Under Node 17+ (OpenSSL 3) it requires
   `NODE_OPTIONS=--openssl-legacy-provider`, which is already baked into the
   `dev` / `compile` scripts — no manual export needed.
