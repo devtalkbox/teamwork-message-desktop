@@ -1,19 +1,50 @@
 import { BrowserWindow, Menu, MenuItem, app } from 'electron'
 import fs from 'fs'
-import * as open from 'open'
 import path from 'path'
 import buildEditorContextMenu from 'electron-editor-context-menu'
 
-import { isExternalUrl, openUrlHandler } from './open-url-handler'
+import { isTrustedAppUrl, openExternalUrl, openUrlHandler } from './open-url-handler'
 import { config } from './config'
+import { writeDiagnostic } from './stability'
+import { attachWindowState, loadWindowState } from './window-state'
 
 const isDevelopment = process.env.NODE_ENV !== 'production'
 
 // When config.development is `true`, load the local dev server instead of
 // the production site (useful for local development / debugging).
 const isDevConfig = config.development === true
-const loadUrl = isDevConfig ? config.developmentUrl : config.teamworkUrl
+const loadUrl = config.appUrl
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
+const configuredSessions = new WeakSet()
+
+const configureRemotePermissions = session => {
+  if (configuredSessions.has(session)) return
+  configuredSessions.add(session)
+
+  const isAllowedPermission = (webContents, permission, details = {}) => {
+    const requestingUrl = details.requestingUrl || (webContents && webContents.getURL())
+    if (!isTrustedAppUrl(requestingUrl)) return false
+
+    if (['notifications', 'fullscreen', 'clipboard-sanitized-write', 'geolocation'].includes(permission)) {
+      return true
+    }
+    if (permission === 'media') {
+      const mediaTypes = details.mediaTypes || []
+      return mediaTypes.length === 0 || mediaTypes.every(type => type === 'audio' || type === 'video')
+    }
+    return false
+  }
+
+  session.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    callback(isAllowedPermission(webContents, permission, details))
+  })
+  session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+    return isAllowedPermission(webContents, permission, {
+      ...details,
+      requestingUrl: requestingOrigin,
+    })
+  })
+}
 
 const loadWithRetry = async (window, url) => {
   const attempts = Math.max(1, config.pageLoadRetries || 1)
@@ -58,9 +89,11 @@ const getDirFilesRecursively = function(dir) {
 }
 
 export async function createMainWindow() {
+  const savedState = loadWindowState()
   const window = new BrowserWindow({
-    width: 1024,
-    height: 1024,
+    width: savedState ? savedState.bounds.width : 1024,
+    height: savedState ? savedState.bounds.height : 1024,
+    ...(savedState ? { x: savedState.bounds.x, y: savedState.bounds.y } : {}),
     show: false,
     backgroundColor: '#202427',
     webPreferences: {
@@ -81,12 +114,16 @@ export async function createMainWindow() {
 
   const isMac = process.platform === 'darwin'
   let rendererRecoveryAttempts = 0
+  let rendererStableTimer = null
+  configureRemotePermissions(window.webContents.session)
 
   const revealWindow = () => {
     if (!window.isDestroyed() && !window.isVisible()) window.show()
   }
   window.once('ready-to-show', revealWindow)
   setTimeout(revealWindow, 8000)
+  attachWindowState(window)
+  if (savedState && savedState.maximized) window.maximize()
 
   if (isDevelopment || isDevConfig) {
     window.webContents.openDevTools()
@@ -142,18 +179,26 @@ export async function createMainWindow() {
   })
 
   window.webContents.on('did-finish-load', () => {
-    rendererRecoveryAttempts = 0
     revealWindow()
+    // A renderer that crashes shortly after loading is not stable. Reset the
+    // recovery budget only after it has stayed alive for a full minute.
+    clearTimeout(rendererStableTimer)
+    rendererStableTimer = setTimeout(() => {
+      rendererRecoveryAttempts = 0
+    }, 60000)
   })
 
   window.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     if (isMainFrame) {
       console.error('[page-load] did-fail-load', errorCode, errorDescription, validatedURL)
+      writeDiagnostic('page-load-failed', { errorCode, errorDescription, validatedURL })
     }
   })
 
   window.webContents.on('render-process-gone', (event, details) => {
     console.error('[renderer-gone]', details.reason, details.exitCode)
+    writeDiagnostic('renderer-process-gone', details)
+    clearTimeout(rendererStableTimer)
     if (window.isDestroyed() || details.reason === 'clean-exit' || rendererRecoveryAttempts >= 2) return
 
     rendererRecoveryAttempts += 1
@@ -164,17 +209,25 @@ export async function createMainWindow() {
 
   window.on('unresponsive', () => {
     console.error('[window] Renderer became unresponsive; reloading once')
+    writeDiagnostic('renderer-unresponsive', { url: window.webContents.getURL() })
+    clearTimeout(rendererStableTimer)
     if (rendererRecoveryAttempts >= 2 || window.isDestroyed()) return
     rendererRecoveryAttempts += 1
     window.webContents.reloadIgnoringCache()
   })
 
   window.webContents.setWindowOpenHandler(details => {
-    if (isExternalUrl(details.url)) {
-      open(details.url)
+    if (!isTrustedAppUrl(details.url)) {
+      openExternalUrl(details.url)
       return { action: 'deny' }
     }
-    return { action: 'allow' }
+
+    // The legacy login flow calls window.open() with an internal /self/init
+    // route. Allowing it creates a second unmanaged BrowserWindow on modern
+    // Electron. That empty window sits above the already-loaded workspace and
+    // looks like a black screen until it is manually refreshed.
+    console.warn('[window-open] Prevented duplicate internal window', details.url)
+    return { action: 'deny' }
   })
 
   window.webContents.on('will-navigate', openUrlHandler)
@@ -182,9 +235,13 @@ export async function createMainWindow() {
   window.webContents.on('will-redirect', openUrlHandler)
 
   window.webContents.on('context-menu', (event, params) => {
-    const menu = new Menu()
+    // Only show the context menu in text editors. Keep spell-check and edit
+    // actions in one menu so a single right click cannot open two popups.
+    if (!params.isEditable) return
 
-    // Add each spelling suggestion
+    const menu = buildEditorContextMenu()
+
+    if (params.dictionarySuggestions.length) menu.append(new MenuItem({ type: 'separator' }))
     for (const suggestion of params.dictionarySuggestions) {
       menu.append(
         new MenuItem({
@@ -203,15 +260,6 @@ export async function createMainWindow() {
         }),
       )
     }
-
-    menu.popup()
-  })
-
-  window.webContents.on('context-menu', (event, params) => {
-    // Only show the context menu in text editors.
-    if (!params.isEditable) return
-
-    const menu = buildEditorContextMenu()
 
     // The 'contextmenu' event is emitted after 'selectionchange' has fired but possibly before the
     // visible selection has changed. Try to wait to show the menu until after that, otherwise the

@@ -205,10 +205,12 @@ function registerBadgeHandling() {
 
   window.Notification = NotificationWrapper
 
+  const titleNode = document.querySelector('title')
+  if (!titleNode) return
   new MutationObserver(function () {
     // any changes to title will update the badge
     updateBadge()
-  }).observe(document.querySelector('title'), {
+  }).observe(titleNode, {
     attributes: true,
     childList: true,
     characterData: true,
@@ -271,24 +273,43 @@ function registerFontHandling() {
  */
 const registerRootNodeMutationObserver = () => {
   // Select the node that will be observed for mutations
-  const targetNode = document.getElementById('root')
-
   // Options for the observer (which mutations to observe)
   const config = { attributes: true, childList: true, subtree: true }
 
   // Create an observer instance linked to the callback function
-  const observer = new MutationObserver(function (mutationsList, observer) {
-    window.dispatchEvent(
-      new CustomEvent('onRootMutate', {
-        bubbles: true,
-        detail: mutationsList,
-      }),
-    )
+  let queuedMutations = []
+  let scheduled = false
+  const observer = new MutationObserver(function (mutationsList) {
+    queuedMutations.push(...mutationsList)
+    if (scheduled) return
+
+    scheduled = true
+    requestAnimationFrame(() => {
+      const batch = queuedMutations
+      queuedMutations = []
+      scheduled = false
+      window.dispatchEvent(
+        new CustomEvent('onRootMutate', {
+          bubbles: true,
+          detail: batch,
+        }),
+      )
+    })
   })
 
-  // Start observing the target node for configured mutations
-  // this observer don't need to disconnect
-  observer.observe(targetNode, config)
+  const observeRoot = () => {
+    const targetNode = document.getElementById('root')
+    if (!targetNode) return false
+    observer.observe(targetNode, config)
+    return true
+  }
+
+  if (!observeRoot()) {
+    const rootWaiter = new MutationObserver(() => {
+      if (observeRoot()) rootWaiter.disconnect()
+    })
+    rootWaiter.observe(document.documentElement, { childList: true, subtree: true })
+  }
 }
 
 function registerFunctionalButtons() {
@@ -381,8 +402,44 @@ function registerDraftHandling() {
   const displayNameIdMap = new Map()
   let currentChatBoxId = null
   let currentUpdateEditAreaDraftDebounce = null
+
+  const sanitizeDraftHtml = value => {
+    const template = document.createElement('template')
+    template.innerHTML = String(value || '').slice(0, 100000)
+    const allowedTags = new Set(['A', 'B', 'BR', 'CODE', 'DIV', 'EM', 'I', 'P', 'S', 'SPAN', 'STRONG', 'U'])
+
+    template.content
+      .querySelectorAll('script, style, iframe, object, embed, form, input, button, link, meta')
+      .forEach(element => element.remove())
+
+    Array.from(template.content.querySelectorAll('*')).forEach(element => {
+      if (!allowedTags.has(element.tagName)) {
+        element.replaceWith(...element.childNodes)
+        return
+      }
+
+      Array.from(element.attributes).forEach(attribute => {
+        const keepSafeLink =
+          element.tagName === 'A' &&
+          attribute.name === 'href' &&
+          (() => {
+            try {
+              return ['http:', 'https:'].includes(new URL(attribute.value, window.location.href).protocol)
+            } catch (error) {
+              return false
+            }
+        })()
+        if (!keepSafeLink) element.removeAttribute(attribute.name)
+      })
+      if (element.tagName === 'A' && element.hasAttribute('href')) element.setAttribute('rel', 'noreferrer')
+    })
+
+    return template.innerHTML
+  }
+
   const chatBoxKey = () => {
-    const displayName = document.querySelector('#root .NavigationBar .Avatar .displayName').innerHTML
+    const displayName = document.querySelector('#root .NavigationBar .Avatar .displayName')?.textContent?.trim()
+    if (!displayName) return null
     const isGroup = document.querySelector('#root .NavigationBar .Avatar .title')?.textContent?.indexOf('people') >= 0
     return isGroup ? displayNameIdMap.get('g' + displayName) : displayNameIdMap.get('u' + displayName)
   }
@@ -419,6 +476,7 @@ function registerDraftHandling() {
         textEl.style.display = 'initial'
       }
     } else {
+      const safeDraft = sanitizeDraftHtml(draft)
       // has draft
       // set the member element to none first
       if (memberEl) {
@@ -430,21 +488,24 @@ function registerDraftHandling() {
       }
 
       if (draftTextEl) {
-        draftTextEl.innerHTML = draft
-      } else {
-        chatBox
-          ?.querySelector('.subject')
-          ?.insertAdjacentHTML('afterend', `<div class="what"><span class="draft"><span>${draft}</span></span></div>`)
-      }
-
-      if (draftEl) {
-        draftEl.innerHTML = '<span style="color: darkred">Draft:</span>'
+        draftTextEl.innerHTML = safeDraft
       } else {
         chatBox
           ?.querySelector('.subject')
           ?.insertAdjacentHTML(
             'afterend',
-            `<div class="who"><span class="draft"><span style="color: darkred">Draft:</span></span></div>`,
+            `<div class="what"><span class="draft"><span>${safeDraft}</span></span></div>`,
+          )
+      }
+
+      if (draftEl) {
+        draftEl.textContent = 'Draft:'
+      } else {
+        chatBox
+          ?.querySelector('.subject')
+          ?.insertAdjacentHTML(
+            'afterend',
+            '<div class="who"><span class="draft"><span>Draft:</span></span></div>',
           )
       }
     }
@@ -485,21 +546,25 @@ function registerDraftHandling() {
                   const value = event.target.innerHTML
 
                   currentUpdateEditAreaDraftDebounce(() => {
-                    window.localStorage.setItem(cbKey, value)
+                    if (!cbKey) return
+                    const safeValue = sanitizeDraftHtml(value)
+                    window.localStorage.setItem(cbKey, safeValue)
 
                     const chatBox = document.querySelector(`.item[data-conversation-id="${cbKey}"]`)
 
-                    updateChatBoxDOM({ chatBox, draft: value, inputMode: true })
+                    updateChatBoxDOM({ chatBox, draft: safeValue, inputMode: true })
                   }, 100)
                 },
                 { passive: true },
               )
 
-              const restoredDraft = window.localStorage.getItem(cbKey)
+              const restoredDraft = cbKey ? window.localStorage.getItem(cbKey) : null
 
               if (restoredDraft && editArea.innerHTML !== restoredDraft) {
                 // restore the draft
-                editArea.innerHTML = restoredDraft
+                const safeRestoredDraft = sanitizeDraftHtml(restoredDraft)
+                editArea.innerHTML = safeRestoredDraft
+                if (safeRestoredDraft !== restoredDraft) window.localStorage.setItem(cbKey, safeRestoredDraft)
               }
             }
           }
@@ -676,6 +741,7 @@ function registerWebSocketInterceptor() {
 }
 
 function registerAutoScroll() {
+  const registeredScrollViews = new WeakSet()
   window.addEventListener(
     'onRootMutate',
     ({ detail: mutationsList }) => {
@@ -687,19 +753,128 @@ function registerAutoScroll() {
           mutation.target.className === 'ChatView'
         ) {
           const scrollView = document.querySelector('.scrollView')
+          if (!scrollView) continue
           scrollView.style['overflow-anchor'] = 'auto'
           scrollView.style['overflow-y'] = 'scroll'
 
-          scrollView.addEventListener('scroll', e => {
-            if (e.target.scrollTop < 150) {
-              e.target.querySelector('.previousButton')?.click()
-            }
-          })
+          if (!registeredScrollViews.has(scrollView)) {
+            registeredScrollViews.add(scrollView)
+            scrollView.addEventListener(
+              'scroll',
+              e => {
+                if (e.target.scrollTop < 150) {
+                  e.target.querySelector('.previousButton')?.click()
+                }
+              },
+              { passive: true },
+            )
+          }
         }
       }
     },
     { passive: true },
   )
+}
+
+/**
+ * The legacy web client can occasionally finish a first-time login without
+ * mounting its workspace. Credentials have already been persisted at that
+ * point, so the same manual refresh that recovers the app can be performed
+ * safely. Only report a continuously empty root after the password form has
+ * actually disappeared; the main process limits recovery to once per window.
+ */
+function registerPostLoginBlankScreenRecovery() {
+  let sawPasswordForm = Boolean(document.querySelector('input[type="password"]'))
+  let transitionStartedAt = 0
+  let blankChecks = 0
+  let reported = false
+  let workspaceReadyReported = false
+  let workspaceReadySince = 0
+
+  const workspaceSelectors = [
+    '.RecentMessageView',
+    '.TopBar',
+    '.ConversationView .NavigationBar',
+    '.ConversationView .MessageView',
+  ]
+
+  const check = () => {
+    if (document.hidden) return
+    if (reported) return
+
+    const passwordVisible = Array.from(document.querySelectorAll('input[type="password"]')).some(
+      input => input.offsetWidth || input.offsetHeight || input.getClientRects().length,
+    )
+    if (passwordVisible) {
+      sawPasswordForm = true
+      transitionStartedAt = 0
+      blankChecks = 0
+      reported = false
+      workspaceReadyReported = false
+      workspaceReadySince = 0
+      return
+    }
+
+    if (!sawPasswordForm) return
+    if (!transitionStartedAt) transitionStartedAt = Date.now()
+
+    const workspaceReady = workspaceSelectors.some(selector => document.querySelector(selector))
+    if (workspaceReady) {
+      // Keep the watchdog armed. The legacy client can mount the workspace
+      // briefly and then lose it when a later async initializer fails.
+      transitionStartedAt = 0
+      blankChecks = 0
+      reported = false
+      if (!workspaceReadySince) workspaceReadySince = Date.now()
+      if (!workspaceReadyReported && Date.now() - workspaceReadySince >= 30000) {
+        workspaceReadyReported = true
+        ipc.send('workspace-ready', {})
+      }
+      return
+    }
+
+    workspaceReadySince = 0
+    if (!transitionStartedAt) transitionStartedAt = Date.now()
+    blankChecks += 1
+
+    // Allow normal first-login initialization plenty of time. Requiring four
+    // consecutive empty checks avoids reacting to brief React route changes.
+    if (Date.now() - transitionStartedAt >= 12000 && blankChecks >= 4) {
+      reported = true
+      console.warn('[post-login-recovery] Reporting an empty workspace after login')
+      ipc.send('post-login-blank-screen', { elapsed: Date.now() - transitionStartedAt })
+    }
+  }
+
+  setInterval(check, 1000)
+}
+
+/**
+ * A desktop app is expected to keep the session between launches. The legacy
+ * login page defaults "Remember me" to off, which makes an otherwise valid
+ * login disappear as soon as Electron exits. Select that option whenever the
+ * password form is shown and use a real click so React receives the change.
+ */
+function registerPersistentLogin() {
+  const ensureRememberMe = () => {
+    const passwordInput = document.querySelector('input[type="password"]')
+    if (!passwordInput) return
+
+    const loginContainer = passwordInput.closest('.LoginView, form') || document
+    const checkboxes = Array.from(loginContainer.querySelectorAll('input[type="checkbox"]'))
+    const rememberCheckbox =
+      checkboxes.find(checkbox => /remember/i.test(checkbox.parentElement?.textContent || '')) ||
+      checkboxes[0]
+
+    if (rememberCheckbox && !rememberCheckbox.checked) {
+      rememberCheckbox.click()
+      console.log('[persistent-login] Remember me enabled')
+    }
+  }
+
+  ensureRememberMe()
+  const observer = new MutationObserver(ensureRememberMe)
+  observer.observe(document.documentElement, { childList: true, subtree: true })
 }
 
 // register XHR intercept the dispatch CustomEvent for post-processing
@@ -753,3 +928,7 @@ registerResetRecommendedSettings()
 registerDownloadLatestVersion()
 
 registerAutoScroll()
+
+registerPersistentLogin()
+
+registerPostLoginBlankScreenRecovery()

@@ -9,12 +9,15 @@
   "scripts": {
     "predev": "node scripts/check-electron-arch.js",
     "dev": "NODE_OPTIONS=--openssl-legacy-provider electron-webpack dev",
+    "dev:staging": "TEAMWORK_ENV=staging NODE_OPTIONS=--openssl-legacy-provider electron-webpack dev",
     "compile": "NODE_OPTIONS=--openssl-legacy-provider electron-webpack",
     "dist": "yarn compile && electron-builder",
     "dist:windows": "yarn compile && electron-builder build --win",
     "dist:mac": "yarn compile && electron-builder build --mac -c.compression=store -c.mac.identity=null",
     "dist:dir-nosign": "yarn dist --dir -c.compression=store -c.mac.identity=null",
-    "dist:dir": "yarn dist --dir -c.compression=store"
+    "dist:dir": "yarn dist --dir -c.compression=store",
+    "dist:staging": "yarn compile && electron-builder --dir -c.extraMetadata.buildEnvironment=staging -c.compression=store -c.mac.identity=null",
+    "dist:production": "yarn compile && electron-builder -c.extraMetadata.buildEnvironment=production"
   },
   "build": {
     "appId": "com.gaplotech.teamwork-wrapper",
@@ -67,7 +70,6 @@
   "dependencies": {
     "electron-dl": "^3.0.1",
     "electron-editor-context-menu": "^1.1.1",
-    "open": "^7.0.4",
     "source-map-support": "^0.5.12"
   },
   "devDependencies": {
