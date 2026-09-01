@@ -72,3 +72,74 @@ input::placeholder,
 .ConversationView > .front > .NavigationBar + .WelcomeView {
     background-color: rgb(36, 39, 41);
 }
+
+/* ====================================================================
+   Voice message player — dark mode colors
+   DarkReader 会反转 web-app 自身 _root.scss 里的暗黑 token（白色会被翻成黑色），
+   并且可能把页面规则里 var() 的原始值烘焙进去。因此这里同时提供：
+   1) CSS 变量覆盖；2) 直接元素覆盖（更可靠）。
+   本层（DarkReader 的 overrideStyle）不会被反转。
+   需求：暗黑模式下 已播放/播放中 = 白色，未播放 = 灰色，播放/暂停 icon = 白色。
+   ==================================================================== */
+html.dark,
+body.dark {
+    --voice-waveform-playing-color: #fff !important;   /* 已播放 / 播放中 = 白 */
+    --voice-waveform-color: #9aa3aa !important;        /* 未播放 = 灰 */
+    --voice-waveform-inactive-color: #9f9f82 !important; /* 兼容旧变量名：未播放 = 灰 */
+    --voice-button-fg: #f5f9fc !important;             /* 播放 / 暂停 icon = 白 */
+    --voice-button-bg: #1f1e2e !important;             /* 播放按钮底色 = 深色（黑色底） */
+    --voice-button-hover-bg: #1f1e2e !important;
+    --voice-meta-color: #c2cdd5 !important;            /* 时间 / 元信息文字 */
+}
+
+/* ---- Direct element overrides (more reliable under DarkReader) ---- */
+
+/* 消息列表里的静态语音气泡 */
+html.dark .VoiceView .voicePlayButton,
+body.dark .VoiceView .voicePlayButton {
+    background-color: #1f1e2e !important;
+    color: #f5f9fc !important;
+}
+html.dark .VoiceView .voicePlayButton svg,
+body.dark .VoiceView .voicePlayButton svg {
+    fill: #f5f9fc !important;
+    stroke: #f5f9fc !important;
+}
+html.dark .VoiceView .voiceWaveform,
+body.dark .VoiceView .voiceWaveform {
+    background-image: repeating-linear-gradient(90deg, #9aa3aa 0, #9aa3aa 2px, transparent 2px, transparent 6px) !important;
+}
+html.dark .VoiceView .voiceSpeedButton,
+body.dark .VoiceView .voiceSpeedButton {
+    background-color: #1f1e2e !important;
+    color: #f5f9fc !important;
+}
+
+/* 播放中的 compact 播放器 */
+html.dark .AudioPlaybackControl.compact .playbackButton,
+body.dark .AudioPlaybackControl.compact .playbackButton {
+    background-color: #1f1e2e !important;
+    color: #f5f9fc !important;
+}
+html.dark .AudioPlaybackControl.compact .playbackButton svg,
+body.dark .AudioPlaybackControl.compact .playbackButton svg {
+    fill: #f5f9fc !important;
+    stroke: #f5f9fc !important;
+}
+html.dark .AudioPlaybackControl.compact .pauseIcon i,
+body.dark .AudioPlaybackControl.compact .pauseIcon i {
+    background-color: #f5f9fc !important;
+}
+html.dark .AudioPlaybackControl.compact .progress,
+body.dark .AudioPlaybackControl.compact .progress {
+    background: linear-gradient(90deg,
+        #fff 0,
+        #fff var(--voice-waveform-progress, 0%),
+        #9aa3aa var(--voice-waveform-progress, 0%),
+        #9aa3aa 100%) !important;
+}
+html.dark .AudioPlaybackControl.compact .speedButton,
+body.dark .AudioPlaybackControl.compact .speedButton {
+    background-color: #1f1e2e !important;
+    color: #f5f9fc !important;
+}

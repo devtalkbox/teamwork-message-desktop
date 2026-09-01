@@ -35,7 +35,7 @@ const getBuildEnvironment = () => {
 const environment = getBuildEnvironment()
 const environmentUrls = {
   development: 'http://localhost:8080/#',
-  staging: 'https://teamwork-messenger2-web-206149277907.asia-east2.run.app/',
+  staging: 'https://teamwork.staging.talkbox.net/m/',
   production: 'https://teamwork.gtomato.com/',
 }
 
