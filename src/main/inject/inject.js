@@ -6,7 +6,7 @@ const urls = {
   dashboard: 'https://web.dashboard.gtomato.com',
   roomBooking: 'https://web.dashboard.gtomato.com/room-booking/standalone',
   supportTicket: 'https://osticket.gtomato.com/open.php',
-  githubDownload: 'https://github.com/gaplo917/teamwork-wrap-plus/releases',
+  githubDownload: 'https://github.com/devtalkbox/teamwork-message-desktop/releases',
 }
 /**
  * Injection happens in create-main-window.js

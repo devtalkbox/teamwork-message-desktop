@@ -1,0 +1,71 @@
+name: Release macOS
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-sign-notarize:
+    runs-on: macos-latest
+    environment: production
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+          cache: yarn
+
+      - name: Install Yarn
+        run: npm install --global yarn@1.22.22
+
+      - name: Verify release tag
+        run: node scripts/verify-release-tag.js
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build, sign, and notarize macOS packages
+        run: yarn release:production
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          REQUIRE_NOTARIZATION: 'true'
+
+      - name: Verify signatures and notarization tickets
+        run: |
+          find dist/release -type d -name '*.app' -prune -exec codesign --verify --deep --strict --verbose=2 '{}' ';'
+          find dist/release -type d -name '*.app' -prune -exec xcrun stapler validate '{}' ';'
+
+      - name: Generate SHA-256 checksums
+        run: |
+          cd dist/release
+          shasum -a 256 *.dmg *.zip > SHA256SUMS.txt
+
+      - name: Create draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/release/*.dmg \
+            dist/release/*.zip \
+            dist/release/SHA256SUMS.txt \
+            --draft \
+            --verify-tag \
+            --generate-notes \
+            --title "$GITHUB_REF_NAME"

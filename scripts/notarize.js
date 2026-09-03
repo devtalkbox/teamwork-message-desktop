@@ -1,26 +1,38 @@
-require('dotenv').config();
-const { notarize } = require('electron-notarize');
+require('dotenv').config()
+const path = require('path')
+const { notarize } = require('@electron/notarize')
+
+const requiredCredentialNames = [
+    'APPLE_ID',
+    'APPLE_APP_SPECIFIC_PASSWORD',
+    'APPLE_TEAM_ID',
+]
 
 exports.default = async function notarizing(context) {
-    const { electronPlatformName, appOutDir } = context;
+    const { electronPlatformName, appOutDir } = context
     if (electronPlatformName !== 'darwin') {
-        return;
+        return
     }
 
-    // Skip notarization when no Apple ID credentials are configured
-    // (e.g. local unsigned builds with -c.mac.identity=null)
-    if (!process.env.APPLEID || !process.env.APPLEIDPASS) {
-        console.log('skipping notarization: APPLEID / APPLEIDPASS not set');
-        return;
+    const missingCredentials = requiredCredentialNames.filter(name => !process.env[name])
+    if (missingCredentials.length > 0) {
+        if (process.env.REQUIRE_NOTARIZATION === 'true') {
+            throw new Error(`Missing notarization credentials: ${missingCredentials.join(', ')}`)
+        }
+        console.log(`skipping notarization: missing ${missingCredentials.join(', ')}`)
+        return
     }
-    console.log('starting to notarizing')
 
-    const appName = context.packager.appInfo.productFilename;
+    const appName = context.packager.appInfo.productFilename
+    const appPath = path.join(appOutDir, `${appName}.app`)
+    console.log(`starting notarization for ${appPath}`)
 
-    return await notarize({
-        appBundleId: 'com.gaplotech.teamwork-wrapper',
-        appPath: `${appOutDir}/${appName}.app`,
-        appleId: process.env.APPLEID,
-        appleIdPassword: process.env.APPLEIDPASS,
-    });
-};
+    await notarize({
+        appPath,
+        appleId: process.env.APPLE_ID,
+        appleIdPassword: process.env.APPLE_APP_SPECIFIC_PASSWORD,
+        teamId: process.env.APPLE_TEAM_ID,
+    })
+
+    console.log(`notarization completed for ${appPath}`)
+}

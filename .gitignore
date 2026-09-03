@@ -7,3 +7,8 @@ thumbs.db
 sample.env
 yarn-error.log
 teamworkwrapperprod.provisionprofile
+*.cer
+*.p12
+*.pfx
+AuthKey_*.p8
+certificate-base64.txt

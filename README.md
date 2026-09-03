@@ -117,18 +117,14 @@ yarn dev
 
 # Code Signing
 
-Code signing is hard.
+Public macOS builds are signed with a Developer ID Application certificate
+and notarized through Apple's `notarytool` service via `@electron/notarize`.
+Unsigned local builds still skip notarization, while the production release
+workflow sets `REQUIRE_NOTARIZATION=true` and fails if any credential is
+missing.
 
-To build a smooth experience of a electron app to the end-user, developers
-need to do [Notarize](https://developer.apple.com/documentation/xcode/notarizing_macos_software_before_distribution)
-in order to pass through the Mac GateKeeper.
-
-This project use `electron-notarize`. Details tutorial: https://kilianvalkhof.com/2019/electron/notarizing-your-electron-application/
-
-`scripts/notarize.js` automatically **skips** notarization when
-`APPLEID` / `APPLEIDPASS` are not set, so unsigned local builds succeed
-without touching the `afterSign` hook. Set the credentials (see
-`sample.env`) when you actually want to notarize.
+See [docs/RELEASING.md](docs/RELEASING.md) for certificate setup, GitHub
+Secrets, version tags, verification, and publishing a draft GitHub Release.
 
 # Packaging & Distribution
 

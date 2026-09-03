@@ -2,7 +2,14 @@
   "name": "teamwork-wrapper",
   "productName": "Teamwork Wrap+",
   "version": "5.1.1",
+  "description": "Teamwork desktop messenger for macOS and Windows.",
+  "author": "devtalkbox",
   "license": "MIT",
+  "homepage": "https://github.com/devtalkbox/teamwork-message-desktop",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/devtalkbox/teamwork-message-desktop.git"
+  },
   "engines": {
     "node": ">=22.12.0"
   },
@@ -13,11 +20,13 @@
     "compile": "NODE_OPTIONS=--openssl-legacy-provider electron-webpack",
     "dist": "yarn compile && electron-builder",
     "dist:windows": "yarn compile && electron-builder build --win",
-    "dist:mac": "yarn compile && electron-builder build --mac -c.compression=store -c.mac.identity=null",
+    "dist:mac": "yarn compile && electron-builder build --mac --publish never",
+    "dist:mac:unsigned": "yarn compile && electron-builder build --mac --publish never -c.compression=store -c.mac.identity=null",
     "dist:dir-nosign": "yarn dist --dir -c.compression=store -c.mac.identity=null",
     "dist:dir": "yarn dist --dir -c.compression=store",
     "dist:staging": "yarn compile && electron-builder --dir -c.extraMetadata.buildEnvironment=staging -c.compression=store -c.mac.identity=null",
-    "dist:production": "yarn compile && electron-builder -c.extraMetadata.buildEnvironment=production"
+    "dist:production": "yarn compile && electron-builder build --config electron-builder.release.yml --publish never -c.extraMetadata.buildEnvironment=production",
+    "release:production": "yarn compile && electron-builder build --config electron-builder.release.yml --publish never -c.extraMetadata.buildEnvironment=production"
   },
   "build": {
     "appId": "com.gaplotech.teamwork-wrapper",
@@ -35,20 +44,17 @@
       "category": "productivity",
       "target": [
         {
-          "target": "mas",
-          "arch": [
-            "universal"
-          ]
-        },
-        {
-          "target": "mas-dev"
-        },
-        {
           "target": "dmg",
           "arch": [
             "arm64",
-            "x64",
-            "universal"
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
           ]
         }
       ],
@@ -57,8 +63,11 @@
       "gatekeeperAssess": false,
       "darkModeSupport": true,
       "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
-      "provisioningProfile": "./teamworkwrapperprod.provisionprofile"
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "extendInfo": {
+        "NSCameraUsageDescription": "Teamwork uses the camera when you start or join a video call.",
+        "NSMicrophoneUsageDescription": "Teamwork uses the microphone for voice messages and calls."
+      }
     },
     "afterSign": "scripts/notarize.js"
   },
@@ -73,11 +82,11 @@
     "source-map-support": "^0.5.12"
   },
   "devDependencies": {
+    "@electron/notarize": "3.1.1",
     "copy-webpack-plugin": "^6.0.1",
     "dotenv": "^8.2.0",
     "electron": "^44.0.0",
     "electron-builder": "^24.9.1",
-    "electron-notarize": "^0.3.0",
     "electron-webpack": "^2.8.2",
     "prettier": "^2.0.5",
     "webpack": "~4.43.0"
