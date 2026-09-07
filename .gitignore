@@ -4,5 +4,13 @@ node_modules/
 thumbs.db
 .idea/
 .env
+sample.env
 yarn-error.log
 teamworkwrapperprod.provisionprofile
+*.cer
+*.p12
+*.pfx
+*.p8
+*.cert
+certificate-base64.txt
+apple-api-key-base64.txt

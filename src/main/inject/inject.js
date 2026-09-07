@@ -6,7 +6,7 @@ const urls = {
   dashboard: 'https://web.dashboard.gtomato.com',
   roomBooking: 'https://web.dashboard.gtomato.com/room-booking/standalone',
   supportTicket: 'https://osticket.gtomato.com/open.php',
-  githubDownload: 'https://github.com/gaplo917/teamwork-wrap-plus/releases',
+  githubDownload: 'https://github.com/devtalkbox/teamwork-message-desktop/releases',
 }
 /**
  * Injection happens in create-main-window.js
@@ -18,7 +18,6 @@ const urls = {
  * isNotoSans: string,
  * isPingFang: string,
  * isSubpixel: string,
- * emojiPicker: string,
  * darkModeFixes: string,
  * }} */
 const injectedCss = injectedCode['CSS']
@@ -30,8 +29,7 @@ const injectedCss = injectedCode['CSS']
  * sunny: string,
  * moon: string,
  * roomBooking: string,
- * supportTicket: string,
- * emojiTrigger: string
+ * supportTicket: string
  * }} */
 const injectedSvg = injectedCode['SVG']
 
@@ -117,6 +115,11 @@ function registerDarkModeHandling() {
   console.debug('registerDarkModeHandling')
 
   const updateUI = isDark => {
+    document.documentElement.classList.toggle('dark', isDark)
+    if (document.body) {
+      document.body.classList.toggle('dark', isDark)
+    }
+
     if (isDark) {
       // noinspection JSUnresolvedVariable
       DarkReader.enable(
@@ -202,10 +205,12 @@ function registerBadgeHandling() {
 
   window.Notification = NotificationWrapper
 
+  const titleNode = document.querySelector('title')
+  if (!titleNode) return
   new MutationObserver(function () {
     // any changes to title will update the badge
     updateBadge()
-  }).observe(document.querySelector('title'), {
+  }).observe(titleNode, {
     attributes: true,
     childList: true,
     characterData: true,
@@ -263,62 +268,48 @@ function registerFontHandling() {
   })
 }
 
-// brain-less copy from https://jsfiddle.net/Xeoncross/4tUDk/
-const pasteHtmlAtCaret = html => {
-  let sel, range
-  if (window.getSelection) {
-    sel = window.getSelection()
-    if (sel.getRangeAt && sel.rangeCount) {
-      range = sel.getRangeAt(0)
-      range.deleteContents()
-
-      // Range.createContextualFragment() would be useful here but is
-      // non-standard and not supported in all browsers (IE9, for one)
-      const el = document.createElement('div')
-      el.innerHTML = html
-      let frag = document.createDocumentFragment(),
-        node,
-        lastNode
-      while ((node = el.firstChild)) {
-        lastNode = frag.appendChild(node)
-      }
-      range.insertNode(frag)
-
-      // Preserve the selection
-      if (lastNode) {
-        range = range.cloneRange()
-        range.setStartAfter(lastNode)
-        range.collapse(true)
-        sel.removeAllRanges()
-        sel.addRange(range)
-      }
-    }
-  }
-}
-
 /**
  * Emit CustomEvent('onRootMutate', { detail: MutationRecord[] }) when there is a change in root element
  */
 const registerRootNodeMutationObserver = () => {
   // Select the node that will be observed for mutations
-  const targetNode = document.getElementById('root')
-
   // Options for the observer (which mutations to observe)
   const config = { attributes: true, childList: true, subtree: true }
 
   // Create an observer instance linked to the callback function
-  const observer = new MutationObserver(function (mutationsList, observer) {
-    window.dispatchEvent(
-      new CustomEvent('onRootMutate', {
-        bubbles: true,
-        detail: mutationsList,
-      }),
-    )
+  let queuedMutations = []
+  let scheduled = false
+  const observer = new MutationObserver(function (mutationsList) {
+    queuedMutations.push(...mutationsList)
+    if (scheduled) return
+
+    scheduled = true
+    requestAnimationFrame(() => {
+      const batch = queuedMutations
+      queuedMutations = []
+      scheduled = false
+      window.dispatchEvent(
+        new CustomEvent('onRootMutate', {
+          bubbles: true,
+          detail: batch,
+        }),
+      )
+    })
   })
 
-  // Start observing the target node for configured mutations
-  // this observer don't need to disconnect
-  observer.observe(targetNode, config)
+  const observeRoot = () => {
+    const targetNode = document.getElementById('root')
+    if (!targetNode) return false
+    observer.observe(targetNode, config)
+    return true
+  }
+
+  if (!observeRoot()) {
+    const rootWaiter = new MutationObserver(() => {
+      if (observeRoot()) rootWaiter.disconnect()
+    })
+    rootWaiter.observe(document.documentElement, { childList: true, subtree: true })
+  }
 }
 
 function registerFunctionalButtons() {
@@ -402,81 +393,6 @@ function registerFunctionalButtons() {
   )
 }
 
-function registerEmojiHandling() {
-  const emojiPickerStyleEl = document.createElement('style')
-  emojiPickerStyleEl.innerText = injectedCss.emojiPicker
-
-  // add style to DOM
-  document.head.appendChild(emojiPickerStyleEl)
-
-  // create emoji picker
-  const picker = new window.Picker({
-    onEmojiSelect: emoji => {
-      const el = document.getElementsByClassName('Editable')[0]
-      el?.focus()
-
-      requestAnimationFrame(() => {
-        pasteHtmlAtCaret(emoji.native)
-        el?.dispatchEvent(new Event('input'))
-      })
-    },
-  })
-
-  document.body.prepend(picker)
-
-  let dismissEmojiPicker = null
-  const showEmojiPicker = () => {
-    document.getElementById('emoji-trigger')?.classList.add('hovered')
-    if (!picker?.classList.contains('visible')) {
-      picker?.classList.add('visible')
-    }
-  }
-  const cancelDismissEmojiPicker = () => {
-    if (dismissEmojiPicker != null) {
-      clearTimeout(dismissEmojiPicker)
-    }
-  }
-  const scheduleDismissEmojiPicker = () => {
-    cancelDismissEmojiPicker()
-    dismissEmojiPicker = setTimeout(() => {
-      requestAnimationFrame(() => {
-        picker?.classList.remove('visible')
-        document.getElementById('emoji-trigger')?.classList.remove('hovered')
-      })
-    }, 300)
-  }
-
-  picker.addEventListener('mouseenter', cancelDismissEmojiPicker)
-  picker.addEventListener('mouseleave', scheduleDismissEmojiPicker)
-
-  window.addEventListener(
-    'onRootMutate',
-    ({ detail: mutationsList }) => {
-      for (let mutation of mutationsList) {
-        if (
-          mutation.type === 'childList' &&
-          mutation.addedNodes.length === 0 &&
-          mutation.target?.className === 'ChatView' &&
-          mutation.nextSibling?.className === 'InputBox'
-        ) {
-          const adjacentElement = document.getElementsByClassName('file')[0]
-          const hasEmojiTrigger = !!document.getElementById('emoji-trigger')
-
-          if (adjacentElement && !hasEmojiTrigger) {
-            adjacentElement.insertAdjacentHTML('beforebegin', injectedSvg.emojiTrigger)
-            // require to get it in runtime when the dom tree has changed
-            const emojiTrigger = document.getElementById('emoji-trigger')
-            emojiTrigger.addEventListener('mouseenter', showEmojiPicker)
-            emojiTrigger.addEventListener('mousemove', showEmojiPicker)
-            emojiTrigger.addEventListener('mouseleave', scheduleDismissEmojiPicker)
-          }
-        }
-      }
-    },
-    { passive: true },
-  )
-}
-
 /**
  * Handled two scenarios
  * 1. update side bar chat box when editing draft
@@ -486,8 +402,44 @@ function registerDraftHandling() {
   const displayNameIdMap = new Map()
   let currentChatBoxId = null
   let currentUpdateEditAreaDraftDebounce = null
+
+  const sanitizeDraftHtml = value => {
+    const template = document.createElement('template')
+    template.innerHTML = String(value || '').slice(0, 100000)
+    const allowedTags = new Set(['A', 'B', 'BR', 'CODE', 'DIV', 'EM', 'I', 'P', 'S', 'SPAN', 'STRONG', 'U'])
+
+    template.content
+      .querySelectorAll('script, style, iframe, object, embed, form, input, button, link, meta')
+      .forEach(element => element.remove())
+
+    Array.from(template.content.querySelectorAll('*')).forEach(element => {
+      if (!allowedTags.has(element.tagName)) {
+        element.replaceWith(...element.childNodes)
+        return
+      }
+
+      Array.from(element.attributes).forEach(attribute => {
+        const keepSafeLink =
+          element.tagName === 'A' &&
+          attribute.name === 'href' &&
+          (() => {
+            try {
+              return ['http:', 'https:'].includes(new URL(attribute.value, window.location.href).protocol)
+            } catch (error) {
+              return false
+            }
+        })()
+        if (!keepSafeLink) element.removeAttribute(attribute.name)
+      })
+      if (element.tagName === 'A' && element.hasAttribute('href')) element.setAttribute('rel', 'noreferrer')
+    })
+
+    return template.innerHTML
+  }
+
   const chatBoxKey = () => {
-    const displayName = document.querySelector('#root .NavigationBar .Avatar .displayName').innerHTML
+    const displayName = document.querySelector('#root .NavigationBar .Avatar .displayName')?.textContent?.trim()
+    if (!displayName) return null
     const isGroup = document.querySelector('#root .NavigationBar .Avatar .title')?.textContent?.indexOf('people') >= 0
     return isGroup ? displayNameIdMap.get('g' + displayName) : displayNameIdMap.get('u' + displayName)
   }
@@ -524,6 +476,7 @@ function registerDraftHandling() {
         textEl.style.display = 'initial'
       }
     } else {
+      const safeDraft = sanitizeDraftHtml(draft)
       // has draft
       // set the member element to none first
       if (memberEl) {
@@ -535,21 +488,24 @@ function registerDraftHandling() {
       }
 
       if (draftTextEl) {
-        draftTextEl.innerHTML = draft
-      } else {
-        chatBox
-          ?.querySelector('.subject')
-          ?.insertAdjacentHTML('afterend', `<div class="what"><span class="draft"><span>${draft}</span></span></div>`)
-      }
-
-      if (draftEl) {
-        draftEl.innerHTML = '<span style="color: darkred">Draft:</span>'
+        draftTextEl.innerHTML = safeDraft
       } else {
         chatBox
           ?.querySelector('.subject')
           ?.insertAdjacentHTML(
             'afterend',
-            `<div class="who"><span class="draft"><span style="color: darkred">Draft:</span></span></div>`,
+            `<div class="what"><span class="draft"><span>${safeDraft}</span></span></div>`,
+          )
+      }
+
+      if (draftEl) {
+        draftEl.textContent = 'Draft:'
+      } else {
+        chatBox
+          ?.querySelector('.subject')
+          ?.insertAdjacentHTML(
+            'afterend',
+            '<div class="who"><span class="draft"><span>Draft:</span></span></div>',
           )
       }
     }
@@ -590,21 +546,25 @@ function registerDraftHandling() {
                   const value = event.target.innerHTML
 
                   currentUpdateEditAreaDraftDebounce(() => {
-                    window.localStorage.setItem(cbKey, value)
+                    if (!cbKey) return
+                    const safeValue = sanitizeDraftHtml(value)
+                    window.localStorage.setItem(cbKey, safeValue)
 
                     const chatBox = document.querySelector(`.item[data-conversation-id="${cbKey}"]`)
 
-                    updateChatBoxDOM({ chatBox, draft: value, inputMode: true })
+                    updateChatBoxDOM({ chatBox, draft: safeValue, inputMode: true })
                   }, 100)
                 },
                 { passive: true },
               )
 
-              const restoredDraft = window.localStorage.getItem(cbKey)
+              const restoredDraft = cbKey ? window.localStorage.getItem(cbKey) : null
 
               if (restoredDraft && editArea.innerHTML !== restoredDraft) {
                 // restore the draft
-                editArea.innerHTML = restoredDraft
+                const safeRestoredDraft = sanitizeDraftHtml(restoredDraft)
+                editArea.innerHTML = safeRestoredDraft
+                if (safeRestoredDraft !== restoredDraft) window.localStorage.setItem(cbKey, safeRestoredDraft)
               }
             }
           }
@@ -639,7 +599,17 @@ function registerDraftHandling() {
     'onXHRResponse',
     ({ detail: { method, url, responseText, data } }) => {
       if (!responseText) return
-      const responseJson = JSON.parse(responseText)
+      const isDraftEndpoint =
+        url.endsWith('api/group') || url.endsWith('api/user') || url.endsWith('api/message/sendMsg')
+      if (!isDraftEndpoint) return
+
+      let responseJson
+      try {
+        responseJson = JSON.parse(responseText)
+      } catch (error) {
+        console.warn('Unable to parse Teamwork API response', url, error)
+        return
+      }
 
       if (url.endsWith('api/group')) {
         if (responseJson?.data && Array.isArray(responseJson.data)) {
@@ -674,10 +644,6 @@ function registerXHRInterceptor() {
   XMLHttpRequest.prototype.open = function (method, url) {
     this._method = method
     this._url = url
-    if (!this._hooked) {
-      this._hooked = true
-      setupHook(this)
-    }
     rawOpen.apply(this, arguments)
   }
   XMLHttpRequest.prototype.send = function (data) {
@@ -687,38 +653,27 @@ function registerXHRInterceptor() {
         detail: { data, url: this.url },
       }),
     )
+
+    this.addEventListener(
+      'loadend',
+      () => {
+        if (this.responseType !== '' && this.responseType !== 'text') return
+
+        window.dispatchEvent(
+          new CustomEvent('onXHRResponse', {
+            detail: {
+              url: this._url,
+              method: this._method,
+              data: this._data,
+              responseText: this.responseText,
+            },
+          }),
+        )
+      },
+      { once: true },
+    )
+
     rawSend.apply(this, arguments)
-  }
-
-  function setupHook(xhr) {
-    function getter() {
-      delete xhr.responseText
-      const ret = xhr.responseText
-      setup()
-
-      window.dispatchEvent(
-        new CustomEvent('onXHRResponse', {
-          detail: {
-            url: this._url,
-            method: this._method,
-            data: this._data,
-            responseText: ret,
-          },
-        }),
-      )
-      return ret
-    }
-
-    function setter(str) {}
-
-    function setup() {
-      Object.defineProperty(xhr, 'responseText', {
-        get: getter,
-        set: setter,
-        configurable: true,
-      })
-    }
-    setup()
   }
 }
 
@@ -786,6 +741,7 @@ function registerWebSocketInterceptor() {
 }
 
 function registerAutoScroll() {
+  const registeredScrollViews = new WeakSet()
   window.addEventListener(
     'onRootMutate',
     ({ detail: mutationsList }) => {
@@ -797,19 +753,128 @@ function registerAutoScroll() {
           mutation.target.className === 'ChatView'
         ) {
           const scrollView = document.querySelector('.scrollView')
+          if (!scrollView) continue
           scrollView.style['overflow-anchor'] = 'auto'
           scrollView.style['overflow-y'] = 'scroll'
 
-          scrollView.addEventListener('scroll', e => {
-            if (e.target.scrollTop < 150) {
-              e.target.querySelector('.previousButton')?.click()
-            }
-          })
+          if (!registeredScrollViews.has(scrollView)) {
+            registeredScrollViews.add(scrollView)
+            scrollView.addEventListener(
+              'scroll',
+              e => {
+                if (e.target.scrollTop < 150) {
+                  e.target.querySelector('.previousButton')?.click()
+                }
+              },
+              { passive: true },
+            )
+          }
         }
       }
     },
     { passive: true },
   )
+}
+
+/**
+ * The legacy web client can occasionally finish a first-time login without
+ * mounting its workspace. Credentials have already been persisted at that
+ * point, so the same manual refresh that recovers the app can be performed
+ * safely. Only report a continuously empty root after the password form has
+ * actually disappeared; the main process limits recovery to once per window.
+ */
+function registerPostLoginBlankScreenRecovery() {
+  let sawPasswordForm = Boolean(document.querySelector('input[type="password"]'))
+  let transitionStartedAt = 0
+  let blankChecks = 0
+  let reported = false
+  let workspaceReadyReported = false
+  let workspaceReadySince = 0
+
+  const workspaceSelectors = [
+    '.RecentMessageView',
+    '.TopBar',
+    '.ConversationView .NavigationBar',
+    '.ConversationView .MessageView',
+  ]
+
+  const check = () => {
+    if (document.hidden) return
+    if (reported) return
+
+    const passwordVisible = Array.from(document.querySelectorAll('input[type="password"]')).some(
+      input => input.offsetWidth || input.offsetHeight || input.getClientRects().length,
+    )
+    if (passwordVisible) {
+      sawPasswordForm = true
+      transitionStartedAt = 0
+      blankChecks = 0
+      reported = false
+      workspaceReadyReported = false
+      workspaceReadySince = 0
+      return
+    }
+
+    if (!sawPasswordForm) return
+    if (!transitionStartedAt) transitionStartedAt = Date.now()
+
+    const workspaceReady = workspaceSelectors.some(selector => document.querySelector(selector))
+    if (workspaceReady) {
+      // Keep the watchdog armed. The legacy client can mount the workspace
+      // briefly and then lose it when a later async initializer fails.
+      transitionStartedAt = 0
+      blankChecks = 0
+      reported = false
+      if (!workspaceReadySince) workspaceReadySince = Date.now()
+      if (!workspaceReadyReported && Date.now() - workspaceReadySince >= 30000) {
+        workspaceReadyReported = true
+        ipc.send('workspace-ready', {})
+      }
+      return
+    }
+
+    workspaceReadySince = 0
+    if (!transitionStartedAt) transitionStartedAt = Date.now()
+    blankChecks += 1
+
+    // Allow normal first-login initialization plenty of time. Requiring four
+    // consecutive empty checks avoids reacting to brief React route changes.
+    if (Date.now() - transitionStartedAt >= 12000 && blankChecks >= 4) {
+      reported = true
+      console.warn('[post-login-recovery] Reporting an empty workspace after login')
+      ipc.send('post-login-blank-screen', { elapsed: Date.now() - transitionStartedAt })
+    }
+  }
+
+  setInterval(check, 1000)
+}
+
+/**
+ * A desktop app is expected to keep the session between launches. The legacy
+ * login page defaults "Remember me" to off, which makes an otherwise valid
+ * login disappear as soon as Electron exits. Select that option whenever the
+ * password form is shown and use a real click so React receives the change.
+ */
+function registerPersistentLogin() {
+  const ensureRememberMe = () => {
+    const passwordInput = document.querySelector('input[type="password"]')
+    if (!passwordInput) return
+
+    const loginContainer = passwordInput.closest('.LoginView, form') || document
+    const checkboxes = Array.from(loginContainer.querySelectorAll('input[type="checkbox"]'))
+    const rememberCheckbox =
+      checkboxes.find(checkbox => /remember/i.test(checkbox.parentElement?.textContent || '')) ||
+      checkboxes[0]
+
+    if (rememberCheckbox && !rememberCheckbox.checked) {
+      rememberCheckbox.click()
+      console.log('[persistent-login] Remember me enabled')
+    }
+  }
+
+  ensureRememberMe()
+  const observer = new MutationObserver(ensureRememberMe)
+  observer.observe(document.documentElement, { childList: true, subtree: true })
 }
 
 // register XHR intercept the dispatch CustomEvent for post-processing
@@ -862,7 +927,8 @@ registerResetRecommendedSettings()
 // handle download latest version
 registerDownloadLatestVersion()
 
-// handle emoji features
-registerEmojiHandling()
-
 registerAutoScroll()
+
+registerPersistentLogin()
+
+registerPostLoginBlankScreenRecovery()
