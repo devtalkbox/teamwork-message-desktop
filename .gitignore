@@ -10,5 +10,7 @@ teamworkwrapperprod.provisionprofile
 *.cer
 *.p12
 *.pfx
-AuthKey_*.p8
+*.p8
+*.cert
 certificate-base64.txt
+apple-api-key-base64.txt
