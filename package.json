@@ -26,7 +26,8 @@
     "dist:dir": "yarn dist --dir -c.compression=store",
     "dist:staging": "yarn compile && electron-builder --dir -c.extraMetadata.buildEnvironment=staging -c.compression=store -c.mac.identity=null",
     "dist:production": "yarn compile && electron-builder build --config electron-builder.release.yml --publish never -c.extraMetadata.buildEnvironment=production",
-    "release:production": "yarn compile && electron-builder build --config electron-builder.release.yml --publish never -c.extraMetadata.buildEnvironment=production"
+    "release:production": "yarn compile && electron-builder build --config electron-builder.release.yml --publish never -c.extraMetadata.buildEnvironment=production",
+    "release:tag": "node scripts/create-release-tag.js"
   },
   "build": {
     "appId": "com.gaplotech.teamwork-wrapper",

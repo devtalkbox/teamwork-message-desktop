@@ -25,8 +25,8 @@ create the environment. Add these environment secrets:
 
 | Secret | Value |
 | --- | --- |
-| `MAC_CSC_LINK` | Base64-encoded Developer ID Application `.p12` |
-| `MAC_CSC_KEY_PASSWORD` | Password used when exporting the `.p12` |
+| `CSC_LINK` | Base64-encoded Developer ID Application `.p12` |
+| `CSC_KEY_PASSWORD` | Password used when exporting the `.p12` |
 | `APPLE_API_KEY` | Base64-encoded complete App Store Connect `.p8` file |
 | `APPLE_API_KEY_ID` | App Store Connect API Key ID |
 | `APPLE_API_ISSUER` | App Store Connect API Issuer ID |
@@ -42,20 +42,31 @@ Copy the complete contents into the corresponding GitHub secrets, then
 securely delete both encoded temporary files. For additional release control,
 configure required reviewers on the `production` environment.
 
+Store these values under **Environment secrets**, not **Environment
+variables**.
+
 The workflow decodes `APPLE_API_KEY` into a private temporary `.p8` file with
 mode `0600`. It removes the file immediately after notarization, including
 when notarization fails. electron-builder handles the signing certificate from
-`MAC_CSC_LINK`.
+`CSC_LINK`.
 
 ## Publish a release
 
-1. Merge the intended release commit into the release branch.
-2. Update `package.json` to the new version, for example `5.1.2`, and commit it.
-3. Create and push an exactly matching tag:
+1. Merge the intended release commit into the release branch and make sure the
+   `main` working tree is clean.
+2. Create the version commit and matching tag. `patch` is the default; `minor`,
+   `major`, or an explicit `X.Y.Z` version can also be supplied:
 
    ```bash
-   git tag v5.1.2
-   git push origin v5.1.2
+   yarn release:tag
+   yarn release:tag minor
+   yarn release:tag 6.0.0
+   ```
+
+3. Review the generated version commit and tag, then push both:
+
+   ```bash
+   git push origin HEAD --follow-tags
    ```
 
 4. The `Release macOS` workflow builds arm64 and x64 DMG/ZIP artifacts, signs
