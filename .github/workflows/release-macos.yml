@@ -15,7 +15,8 @@ concurrency:
 jobs:
   build-sign-notarize:
     runs-on: macos-latest
-    environment: production
+    # Credentials are stored in staging; the application build remains production.
+    environment: staging
     timeout-minutes: 90
 
     steps:

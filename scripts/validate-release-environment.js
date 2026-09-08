@@ -12,7 +12,7 @@ const missingEnvironmentVariables = requiredEnvironmentVariables.filter(
 
 if (missingEnvironmentVariables.length > 0) {
   console.error(
-    `::error title=Missing release credentials::Configure these GitHub Actions secrets in the production environment: ${missingEnvironmentVariables.join(
+    `::error title=Missing release credentials::Configure these GitHub Actions secrets in the environment selected by this workflow job (Settings > Environments): ${missingEnvironmentVariables.join(
       ', ',
     )}`,
   )

@@ -20,8 +20,11 @@ Never commit certificates, API keys, passwords, or encoded certificate files.
 
 ## GitHub production secrets
 
-In the GitHub repository, open **Settings → Environments → production** and
-create the environment. Add these environment secrets:
+In the GitHub repository, open **Settings → Environments → staging**.
+The release job uses this existing environment to access its credentials.
+It still runs `yarn release:production` and sets `buildEnvironment=production`;
+the GitHub environment name does not select the application's server environment.
+Add these environment secrets:
 
 | Secret | Value |
 | --- | --- |
@@ -40,7 +43,7 @@ openssl base64 -A -in AuthKey_XXXXXXXXXX.p8 -out apple-api-key-base64.txt
 
 Copy the complete contents into the corresponding GitHub secrets, then
 securely delete both encoded temporary files. For additional release control,
-configure required reviewers on the `production` environment.
+configure required reviewers on the `staging` environment.
 
 Store these values under **Environment secrets**, not **Environment
 variables**.
