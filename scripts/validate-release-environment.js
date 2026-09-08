@@ -3,7 +3,6 @@ const requiredEnvironmentVariables = [
   'CSC_KEY_PASSWORD',
   'APPLE_API_KEY',
   'APPLE_API_KEY_ID',
-  'APPLE_API_ISSUER',
 ]
 
 const missingEnvironmentVariables = requiredEnvironmentVariables.filter(

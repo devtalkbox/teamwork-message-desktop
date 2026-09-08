@@ -2,14 +2,30 @@ require('dotenv').config()
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { notarize } = require('@electron/notarize')
+const { createPrivateKey } = require('crypto')
 
-const requiredCredentialNames = ['APPLE_API_KEY_ID', 'APPLE_API_ISSUER']
+function authentication() {
+  const type = (process.env.APPLE_API_KEY_TYPE || 'team').trim()
+  if (!['team', 'individual'].includes(type)) throw new Error('APPLE_API_KEY_TYPE must be team or individual')
+  const appleApiKeyId = (process.env.APPLE_API_KEY_ID || '').trim()
+  const issuer = (process.env.APPLE_API_ISSUER || '').trim()
+  if (!/^[A-Z0-9]{10}$/.test(appleApiKeyId)) throw new Error('APPLE_API_KEY_ID must be the 10-character Key ID')
+  if (type === 'team' && !/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(issuer)) {
+    throw new Error('Team keys require APPLE_API_ISSUER as an Issuer UUID, not a Team ID')
+  }
+  return { appleApiKeyId, ...(type === 'team' ? { appleApiIssuer: issuer } : {}) }
+}
 
 function validatePrivateKey(contents, sourceName) {
   const key = contents.toString('utf8').trim()
   if (!key.startsWith('-----BEGIN PRIVATE KEY-----') || !key.endsWith('-----END PRIVATE KEY-----')) {
     throw new Error(`${sourceName} must contain the complete PKCS#8 .p8 private key`)
+  }
+  try {
+    const parsed = createPrivateKey(key)
+    if (parsed.asymmetricKeyType !== 'ec' || parsed.asymmetricKeyDetails.namedCurve !== 'prime256v1') throw new Error()
+  } catch (_) {
+    throw new Error(`${sourceName} must be a valid App Store Connect P-256 private key`)
   }
   return `${key}\n`
 }
@@ -73,7 +89,7 @@ exports.default = async function notarizing(context) {
     return
   }
 
-  const missingCredentials = requiredCredentialNames.filter(name => !process.env[name])
+  const missingCredentials = ['APPLE_API_KEY_ID'].filter(name => !process.env[name])
   if (!process.env.APPLE_API_KEY && !process.env.APPLE_API_KEY_PATH) {
     missingCredentials.push('APPLE_API_KEY or APPLE_API_KEY_PATH')
   }
@@ -85,6 +101,7 @@ exports.default = async function notarizing(context) {
     return
   }
 
+  const credentials = authentication()
   const resolvedApiKey = resolveApiKey()
 
   try {
@@ -92,11 +109,11 @@ exports.default = async function notarizing(context) {
     const appPath = path.join(appOutDir, `${appName}.app`)
     console.log(`starting notarization for ${appPath}`)
 
+    const { notarize } = await import('@electron/notarize')
     await notarize({
       appPath,
       appleApiKey: resolvedApiKey.apiKeyPath,
-      appleApiKeyId: process.env.APPLE_API_KEY_ID,
-      appleApiIssuer: process.env.APPLE_API_ISSUER,
+      ...credentials,
     })
     console.log(`notarization completed for ${appPath}`)
   } finally {
@@ -105,4 +122,5 @@ exports.default = async function notarizing(context) {
 }
 
 exports.resolveApiKey = resolveApiKey
+exports.authentication = authentication
 exports.decodeBase64PrivateKey = decodeBase64PrivateKey

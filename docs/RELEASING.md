@@ -55,6 +55,16 @@ when notarization fails. electron-builder handles the signing certificate from
 
 ## Publish a release
 
+Before compiling, CI runs a read-only `notarytool history` request to verify
+Apple authentication. A 401 requires checking the actual credentials in
+App Store Connect; code cannot repair a revoked or mismatched key.
+`APPLE_API_KEY` and `APPLE_API_KEY_ID` must refer to the same key.
+For Team Keys, `APPLE_API_ISSUER` is the Issuer UUID, not the Team ID.
+For Individual API Keys, set the `staging` environment **variable**
+`APPLE_API_KEY_TYPE=individual` and use Xcode 26 or newer. The script omits
+Issuer ID in this mode, as required by Apple. The default is `team`.
+Private keys are validated as P-256 keys before contacting Apple.
+
 1. Merge the intended release commit into the release branch and make sure the
    `main` working tree is clean.
 2. Create the version commit and matching tag. `patch` is the default; `minor`,
