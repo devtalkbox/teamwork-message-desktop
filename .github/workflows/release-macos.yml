@@ -47,16 +47,7 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Verify Apple notarization authentication
-        run: node scripts/check-apple-auth.js
-        env:
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY_TYPE: ${{ vars.APPLE_API_KEY_TYPE || 'team' }}
-
       - name: Build, sign, and notarize macOS packages
-        # Apple authentication is checked before compilation and signing.
         run: yarn release:production
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
