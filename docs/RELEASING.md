@@ -18,13 +18,20 @@ notarization, and a stapled notarization ticket.
 
 Never commit certificates, API keys, passwords, or encoded certificate files.
 
-## GitHub production secrets
+## GitHub environments
 
-In the GitHub repository, open **Settings → Environments → staging**.
-The release job uses this existing environment to access its credentials.
-It still runs `yarn release:production` and sets `buildEnvironment=production`;
-the GitHub environment name does not select the application's server environment.
-Add these environment secrets:
+In the GitHub repository, open **Settings → Environments** and create two
+environments, `staging` and `production`. Each one holds **its own** signing
+certificate and notarization key, so a staging build can never be signed with
+the production identity (or the other way round).
+
+The workflow selects one of them with its `channel` input. That choice does two
+things: it uses that environment's credentials, and it sets the server the
+packaged app talks to. `buildEnvironment=staging` loads
+`https://teamwork.staging.talkbox.net/m/`; `buildEnvironment=production` loads
+`https://teamwork.gtomato.com/`.
+
+Add these environment secrets to **both** environments:
 
 | Secret | Value |
 | --- | --- |
@@ -52,6 +59,35 @@ The workflow decodes `APPLE_API_KEY` into a private temporary `.p8` file with
 mode `0600`. It removes the file immediately after notarization, including
 when notarization fails. electron-builder handles the signing certificate from
 `CSC_LINK`.
+
+## Release channels
+
+A release is built for exactly one channel. The channel is baked into the
+package, so a staging build always opens the staging server and a production
+build always opens production.
+
+| | Production | Staging |
+| --- | --- | --- |
+| Trigger | push a `v<version>` tag | **Actions → Release macOS → Run workflow** |
+| Channel input | (tag pushes default to production) | `staging` |
+| Tag | `v5.2.0` | `v5.2.0-staging.1` |
+| Artifacts | `Teamwork-5.2.0-<arch>.dmg` | `Teamwork-5.2.0-staging-<arch>.dmg` |
+| GitHub Release | draft, reviewed before publishing | published immediately as a pre-release |
+
+The tag check enforces the pairing: a production build rejects a tag ending in
+`-staging.<n>`, and a staging build rejects a tag without it. Staging tags are
+excluded from the tag trigger on purpose, so pushing one does not start a
+production build.
+
+For manual runs the workflow checks out the tag you name, so push it first:
+
+```bash
+git tag v5.2.0-staging.1
+git push origin v5.2.0-staging.1
+```
+
+Production keeps the existing flow below; `yarn release:tag` builds the next
+patch version and its tag.
 
 ## Publish a release
 

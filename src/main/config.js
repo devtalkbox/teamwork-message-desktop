@@ -33,11 +33,30 @@ const getBuildEnvironment = () => {
 }
 
 const environment = getBuildEnvironment()
+// The release channel of this package: it decides which server the app talks
+// to. It is baked in at build time (see the release:* scripts in package.json)
+// and cannot be changed by whoever runs the app.
+//
+// `app` is the page the wrapper loads; the rest are external destinations
+// opened from the app. A channel only declares what differs from production.
 const environmentUrls = {
-  development: 'http://localhost:8080/#',
-  staging: 'https://teamwork.staging.talkbox.net/m/',
-  production: 'https://teamwork.gtomato.com/',
+  development: {
+    app: 'http://localhost:8080/#',
+  },
+  staging: {
+    app: 'https://teamwork.staging.talkbox.net/m/',
+    teamwork: 'https://teamwork.staging.talkbox.net/',
+  },
+  production: {
+    app: 'https://teamwork.gtomato.com/',
+    teamwork: 'https://teamwork.gtomato.com/',
+    dashboard: 'https://web.dashboard.gtomato.com/',
+    supportTicket: 'https://osticket.gtomato.com/',
+  },
 }
+
+const productionUrls = environmentUrls.production
+const channelUrls = environmentUrls[environment] || productionUrls
 
 const config = {
   environment,
@@ -47,8 +66,8 @@ const config = {
   // DevTools — useful for local development & debugging even in a
   // packaged build. Set to `false` for production builds.
   development: environment === 'development',
-  developmentUrl: environmentUrls.development,
-  appUrl: environmentUrls[environment] || environmentUrls.production,
+  developmentUrl: environmentUrls.development.app,
+  appUrl: channelUrls.app || productionUrls.app,
   // Prefer stability over GPU acceleration. This avoids intermittent blank
   // windows caused by GPU-process crashes on some macOS/Electron versions.
   disableHardwareAcceleration: true,
@@ -58,9 +77,11 @@ const config = {
   // Force the web client to render its built-in username/password form
   // instead of selecting an SSO provider after the username step.
   forcePasswordLogin: true,
-  teamworkUrl: environmentUrls.production,
-  dashboardUrl: 'https://web.dashboard.gtomato.com/',
-  supportTicketUrl: 'https://osticket.gtomato.com/',
+  teamworkUrl: channelUrls.teamwork || productionUrls.teamwork,
+  // No staging host is known for these two yet, so a staging build still opens
+  // the production dashboard / ticket site.
+  dashboardUrl: channelUrls.dashboard || productionUrls.dashboard,
+  supportTicketUrl: channelUrls.supportTicket || productionUrls.supportTicket,
   googleOauth: 'https://accounts.google.com/o/oauth2',
   githubDownload: 'https://github.com/devtalkbox/teamwork-message-desktop/releases',
 }

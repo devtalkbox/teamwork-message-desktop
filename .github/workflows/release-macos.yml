@@ -4,24 +4,49 @@ on:
   push:
     tags:
       - 'v*'
+      # Staging tags are built by a manual run instead, otherwise pushing one
+      # would start a production build that fails the channel check.
+      - '!v*-staging.*'
+  # A manual run picks the channel, which selects both the GitHub environment
+  # (its own certificate, notarization key and reviewers) and the server the
+  # packaged app points at.
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Release channel — which server the package talks to'
+        type: choice
+        options:
+          - staging
+          - production
+        default: staging
+      tag:
+        description: 'Existing tag to build, e.g. v5.2.0 (production) or v5.2.0-staging.1 (staging)'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   build-sign-notarize:
     runs-on: macos-latest
-    # Credentials are stored in staging; the application build remains production.
-    environment: staging
+    # Each environment holds its own signing certificate and notarization key.
+    # Pushing a tag builds production.
+    environment: ${{ inputs.channel || 'production' }}
     timeout-minutes: 90
+    env:
+      RELEASE_CHANNEL: ${{ inputs.channel || 'production' }}
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -48,7 +73,7 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Build, sign, and notarize macOS packages
-        run: yarn release:production
+        run: yarn release:${{ env.RELEASE_CHANNEL }}
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
@@ -68,15 +93,29 @@ jobs:
           cd dist/release
           shasum -a 256 *.dmg *.zip > SHA256SUMS.txt
 
-      - name: Create draft GitHub Release
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            dist/release/*.dmg \
-            dist/release/*.zip \
-            dist/release/SHA256SUMS.txt \
-            --draft \
-            --verify-tag \
-            --generate-notes \
-            --title "$GITHUB_REF_NAME"
+          set -euo pipefail
+          assets=(
+            dist/release/*.dmg
+            dist/release/*.zip
+            dist/release/SHA256SUMS.txt
+          )
+
+          if [ "$RELEASE_CHANNEL" = "staging" ]; then
+            # Published straight away as a pre-release, so it never becomes the
+            # repository's "latest" release.
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --verify-tag \
+              --prerelease \
+              --generate-notes \
+              --title "$RELEASE_TAG (staging)"
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --verify-tag \
+              --draft \
+              --generate-notes \
+              --title "$RELEASE_TAG"
+          fi
